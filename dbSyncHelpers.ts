@@ -113,13 +113,12 @@ export function resolveEntityListForStoreWrite<T extends { id: string; created_a
     storedArr.every(row => incomingIds.has(row.id))
   ) {
     const incomingById = new Map(incoming.map(row => [row.id, row]));
-    const maxStoredCreated = Math.max(0, ...storedArr.map(entityCreatedAtMs));
     const merged = storedArr.map(row => ({
       ...row,
       ...incomingById.get(row.id)!
     }));
     for (const row of incoming) {
-      if (!storedIds.has(row.id) && entityCreatedAtMs(row) >= maxStoredCreated) {
+      if (!storedIds.has(row.id)) {
         merged.push(row);
       }
     }

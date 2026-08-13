@@ -514,14 +514,13 @@ export default function App() {
   };
 
   // State Updates — sync to database immediately on create/update/delete
-  const handleSaveStudent = (newStudent: Student) => {
-    let nextList: Student[] = [];
-    setStudents(prev => {
-      nextList = [newStudent, ...prev];
-      appStateRef.current = { ...appStateRef.current, students: nextList };
-      return nextList;
-    });
-    void flushSyncNow({ students: nextList }).then(result => reportSyncFailure('Student', result));
+  const handleSaveStudent = async (newStudent: Student): Promise<SyncResponse | null> => {
+    const nextList = [newStudent, ...appStateRef.current.students];
+    appStateRef.current = { ...appStateRef.current, students: nextList };
+    setStudents(nextList);
+    const result = await flushSyncNow({ students: nextList });
+    reportSyncFailure('Student', result);
+    return result;
   };
 
   const handleUpdateStudent = (updatedStudent: Student) => {

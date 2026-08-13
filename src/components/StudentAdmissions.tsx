@@ -9,18 +9,16 @@ import {
   AlertCircle,
   Image as ImageIcon,
   Sparkles,
-  Eye,
-  Download,
-  X
+  Eye
 } from 'lucide-react';
 import { Student, DynamicCustomField, GalleryDocument } from '../types';
-import { getPDFViewerUrl, isPDFUrl, isImageUrl } from '../lib/pdfViewerUtils';
+import { DocumentPreviewModal } from './DocumentPreviewModal';
 import { DynamicFieldSection, validateDynamicFieldValues } from './DynamicFieldSection';
 import { DocumentGalleryPreview } from './DocumentGallery';
 import { uploadDrawerDocument } from '../lib/drawerDocumentUpload';
 
 interface StudentAdmissionsProps {
-  onSaveStudent: (student: Student) => void;
+  onSaveStudent: (student: Student) => Promise<unknown>;
   existingStudents: Student[];
   customFields: DynamicCustomField[];
   onAddCustomField: (field: DynamicCustomField) => void;
@@ -262,7 +260,11 @@ export const StudentAdmissions: React.FC<StudentAdmissionsProps> = ({
       created_at: new Date().toISOString()
     };
 
-    onSaveStudent(newStudent);
+    const syncResult = await onSaveStudent(newStudent);
+    if (syncResult && typeof syncResult === 'object' && 'success' in syncResult && !(syncResult as { success?: boolean }).success) {
+      setErrorMsg('Student could not be saved to the database. Please check your connection and try again.');
+      return;
+    }
     setToastMsg(`Student "${fullName}" admitted successfully! Assigned Roll No: ${newRollNo}`);
     setTimeout(() => setToastMsg(null), 4000);
 
@@ -931,60 +933,12 @@ export const StudentAdmissions: React.FC<StudentAdmissionsProps> = ({
         </form>
       </div>
 
-      {/* DOCUMENT ASSET PREVIEW MODAL */}
-      {previewModalDoc && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-sm animate-in fade-in">
-          <div className="bg-white rounded-3xl max-w-3xl w-full p-6 space-y-4 shadow-2xl border border-slate-200">
-            <div className="flex justify-between items-center border-b pb-3">
-              <h3 className="text-base font-black text-slate-900 flex items-center gap-2">
-                <FileText className="w-5 h-5 text-blue-900" />
-                {previewModalDoc.title}
-              </h3>
-              <button onClick={() => setPreviewModalDoc(null)} className="text-slate-400 hover:text-slate-600">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <div className="p-2 bg-slate-900 rounded-2xl flex items-center justify-center min-h-[350px] max-h-[550px] overflow-hidden">
-              {isPDFUrl(previewModalDoc.url) ? (
-                <iframe
-                  src={getPDFViewerUrl(previewModalDoc.url)}
-                  title={previewModalDoc.title}
-                  className="w-full h-[500px] rounded-xl border border-slate-700 bg-white"
-                />
-              ) : isImageUrl(previewModalDoc.url) ? (
-                <img src={previewModalDoc.url} alt={previewModalDoc.title} className="max-w-full max-h-[500px] object-contain rounded-xl" />
-              ) : (
-                <div className="p-8 text-center text-slate-300 space-y-3">
-                  <FileText className="w-12 h-12 text-amber-400 mx-auto animate-pulse" />
-                  <p className="font-bold text-sm text-white">Document Attached</p>
-                  <p className="font-mono text-xs text-blue-300 break-all">{previewModalDoc.url}</p>
-                </div>
-              )}
-            </div>
-
-            <div className="flex justify-between items-center pt-2">
-              <a
-                href={getPDFViewerUrl(previewModalDoc.url)}
-                download={`${previewModalDoc.title.replace(/\s+/g, '_')}.${isPDFUrl(previewModalDoc.url) ? 'pdf' : 'png'}`}
-                target="_blank"
-                rel="noreferrer"
-                className="px-4 py-2 bg-blue-900 hover:bg-blue-800 text-white font-extrabold text-xs rounded-xl shadow flex items-center gap-1.5"
-              >
-                <Download className="w-4 h-4 text-amber-300" />
-                Download Document
-              </a>
-
-              <button
-                onClick={() => setPreviewModalDoc(null)}
-                className="px-5 py-2 bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold text-xs rounded-xl"
-              >
-                Close Preview
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <DocumentPreviewModal
+        isOpen={!!previewModalDoc}
+        onClose={() => setPreviewModalDoc(null)}
+        title={previewModalDoc?.title || 'Document Preview'}
+        url={previewModalDoc?.url}
+      />
     </div>
   );
 };

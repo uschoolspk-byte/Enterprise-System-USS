@@ -1,6 +1,8 @@
+import { isPDFUrl } from './pdfViewerUtils';
+
 /**
  * Resolve a document URL into something the browser can display inline.
- * Fetches /api/supabase/file paths as blobs so PDF/image viewers work reliably.
+ * Fetches remote and API paths as blobs so PDF/image viewers work reliably.
  */
 export async function resolveDocumentPreviewUrl(url: string | undefined | null): Promise<string> {
   if (!url) return '';
@@ -9,6 +11,17 @@ export async function resolveDocumentPreviewUrl(url: string | undefined | null):
   if (!trimmed) return '';
 
   if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+    if (isPDFUrl(trimmed)) {
+      try {
+        const res = await fetch(trimmed);
+        if (!res.ok) throw new Error(`Could not load PDF (${res.status})`);
+        const buffer = await res.arrayBuffer();
+        const blob = new Blob([buffer], { type: 'application/pdf' });
+        return URL.createObjectURL(blob);
+      } catch (err) {
+        throw err instanceof Error ? err : new Error('Could not load PDF preview.');
+      }
+    }
     return trimmed;
   }
 

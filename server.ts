@@ -2,8 +2,13 @@ import 'dotenv/config';
 import express from 'express';
 import path from 'path';
 import { createServer as createViteServer } from 'vite';
-import nodemailer from 'nodemailer';
 import { GoogleGenAI } from '@google/genai';
+import {
+  sendTransactionalEmail,
+  verifyEmailConnectivity,
+  getEmailConfig,
+  type EmailAttachment
+} from './brevoEmail';
 import { MongoClient, Db } from 'mongodb';
 import {
   mergeRecordsById,
@@ -547,23 +552,7 @@ async function persistCustomFieldsToStores(customFields: any[]) {
   return { supabase: supabaseOk, mongodb: mongodbOk, errors };
 }
 
-// Brevo Transporter
-function createTransporter() {
-  const host = process.env.SMTP_HOST || 'smtp-relay.brevo.com';
-  const port = parseInt(process.env.SMTP_PORT || '587');
-  const user = process.env.SMTP_USER;
-  const pass = process.env.SMTP_PASS;
-
-  if (user && pass) {
-    return nodemailer.createTransport({
-      host,
-      port,
-      secure: port === 465,
-      auth: { user, pass }
-    });
-  }
-  return null;
-}
+// Brevo email — see brevoEmail.ts (HTTP API + SMTP fallback for Render/cloud)
 
 // ====================================================================
 // ADMIN AUTH (password from ADMIN_PASSWORD env — never stored in frontend)
@@ -622,6 +611,7 @@ app.get('/api/db/health', async (_req, res) => {
     supabaseOverflow: supabaseStatus.overflow,
     mongodb: mongoOk,
     cloudinary: isCloudinaryConfigured(),
+    email: getEmailConfig(),
     failover,
     errors: errors.length ? errors : undefined,
     timestamp: new Date().toISOString()
@@ -1432,31 +1422,22 @@ app.post('/api/email/send-test', async (req, res) => {
       headerBadge: 'Template System Preview Dispatch'
     });
 
-    const transporter = createTransporter();
-    let status = 'Simulated';
-
-    if (transporter && !recipientEmail.includes('example.com')) {
-      try {
-        await transporter.sendMail({
-          from: `"${fromName}" <${fromEmail}>`,
-          to: recipientEmail,
-          subject: subject || 'Test Email Template Preview',
-          text: body,
-          html: htmlContent
-        });
-        status = 'Success';
-      } catch (mailErr: any) {
-        console.warn('Test email dispatch note:', mailErr.message);
-        status = 'Simulated';
-      }
-    }
+    const sendResult = await sendTransactionalEmail({
+      to: recipientEmail,
+      subject: subject || 'Test Email Template Preview',
+      text: body,
+      html: htmlContent
+    });
+    const status = sendResult.status === 'Success' ? 'Success' : sendResult.status;
 
     res.json({
-      success: true,
+      success: sendResult.status !== 'Failed',
       status,
+      channel: sendResult.channel,
+      error: sendResult.error,
       message: status === 'Success'
         ? `Test email dispatched successfully to ${recipientEmail}!`
-        : `Email delivery simulated (Brevo SMTP offline). Target: ${recipientEmail}`
+        : sendResult.error || `Email delivery ${String(status).toLowerCase()}. Target: ${recipientEmail}`
     });
   } catch (err: any) {
     console.error('Test email dispatch error:', err);
@@ -1538,42 +1519,34 @@ Unique School System`);
       isPlainTextBody: true
     });
 
-    let mailStatus = 'Simulated';
-    const transporter = createTransporter();
+    const attachments: EmailAttachment[] = [];
+    if (pdfBase64) {
+      const pdfFilename = attachmentFilename
+        || `${student.roll_no}_Progress_Report_${effectiveTerm.replace(/[^a-zA-Z0-9]/g, '_')}.pdf`;
+      attachments.push({
+        filename: pdfFilename,
+        content: pdfBase64.split(',')[1] || pdfBase64,
+        encoding: 'base64'
+      });
 
-    if (transporter && recipientEmail.includes('@') && !recipientEmail.includes('example.com')) {
-      const mailOptions: any = {
-        from: `"${fromName}" <${fromEmail}>`,
-        to: recipientEmail,
-        subject: subject,
-        text: bodyText,
-        html: htmlContent
-      };
-
-      if (pdfBase64) {
-        const pdfFilename = attachmentFilename
-          || `${student.roll_no}_Progress_Report_${effectiveTerm.replace(/[^a-zA-Z0-9]/g, '_')}.pdf`;
-        mailOptions.attachments = [
-          {
-            filename: pdfFilename,
-            content: pdfBase64.split(',')[1] || pdfBase64,
-            encoding: 'base64'
-          }
-        ];
-
-        if (isProfileShare) {
-          const galleryAttachments = await buildProfileDocumentGalleryAttachments(
-            student,
-            'student',
-            student.roll_no || student.id || 'Student'
-          );
-          mailOptions.attachments.push(...galleryAttachments);
-        }
+      if (isProfileShare) {
+        const galleryAttachments = await buildProfileDocumentGalleryAttachments(
+          student,
+          'student',
+          student.roll_no || student.id || 'Student'
+        );
+        attachments.push(...galleryAttachments);
       }
-
-      await transporter.sendMail(mailOptions);
-      mailStatus = 'Success';
     }
+
+    const sendResult = await sendTransactionalEmail({
+      to: recipientEmail,
+      subject,
+      text: bodyText,
+      html: htmlContent,
+      attachments: attachments.length ? attachments : undefined
+    });
+    const mailStatus = sendResult.status === 'Success' ? 'Success' : sendResult.status;
 
     const logEntry = {
       id: 'log-' + Date.now(),
@@ -1696,35 +1669,27 @@ Principal, Unique School System`;
       isPlainTextBody: true
     });
 
-    let mailStatus = 'Simulated';
-    const transporter = createTransporter();
-
-    if (transporter && recipientEmail.includes('@') && !recipientEmail.includes('example.com')) {
-      const mailOptions: any = {
-        from: `"${fromName}" <${fromEmail}>`,
-        to: recipientEmail,
-        subject: subject,
-        text: bodyText,
-        html: htmlContent
-      };
-
-      if (pdfBase64) {
-        const pdfFilename = attachmentFilename
-          || (isVoucher
-            ? `${student.roll_no}_Fee_Voucher_${feeMonth.replace(/[^a-zA-Z0-9]/g, '_')}.pdf`
-            : `${student.roll_no}_Fee_Receipt_${feeMonth.replace(/[^a-zA-Z0-9]/g, '_')}.pdf`);
-        mailOptions.attachments = [
-          {
-            filename: pdfFilename,
-            content: pdfBase64.split(',')[1] || pdfBase64,
-            encoding: 'base64'
-          }
-        ];
-      }
-
-      await transporter.sendMail(mailOptions);
-      mailStatus = 'Success';
+    const feeAttachments: EmailAttachment[] = [];
+    if (pdfBase64) {
+      const pdfFilename = attachmentFilename
+        || (isVoucher
+          ? `${student.roll_no}_Fee_Voucher_${feeMonth.replace(/[^a-zA-Z0-9]/g, '_')}.pdf`
+          : `${student.roll_no}_Fee_Receipt_${feeMonth.replace(/[^a-zA-Z0-9]/g, '_')}.pdf`);
+      feeAttachments.push({
+        filename: pdfFilename,
+        content: pdfBase64.split(',')[1] || pdfBase64,
+        encoding: 'base64'
+      });
     }
+
+    const feeSend = await sendTransactionalEmail({
+      to: recipientEmail,
+      subject,
+      text: bodyText,
+      html: htmlContent,
+      attachments: feeAttachments.length ? feeAttachments : undefined
+    });
+    const mailStatus = feeSend.status === 'Success' ? 'Success' : feeSend.status;
 
     const logEntry = {
       id: 'fee-log-' + Date.now(),
@@ -1798,31 +1763,23 @@ Principal, Unique School System`;
       isPlainTextBody: true
     });
 
-    let mailStatus = 'Simulated';
-    const transporter = createTransporter();
-
-    if (transporter && recipientEmail.includes('@') && !recipientEmail.includes('example.com')) {
-      const mailOptions: any = {
-        from: `"${fromName}" <${fromEmail}>`,
-        to: recipientEmail,
-        subject: subject,
-        text: bodyText,
-        html: htmlContent
-      };
-
-      if (pdfBase64) {
-        mailOptions.attachments = [
-          {
-            filename: `${teacher.teacher_id}_Salary_Slip_${monthYear.replace(/[^a-zA-Z0-9]/g, '_')}.pdf`,
-            content: pdfBase64.split(',')[1] || pdfBase64,
-            encoding: 'base64'
-          }
-        ];
-      }
-
-      await transporter.sendMail(mailOptions);
-      mailStatus = 'Success';
+    const salaryAttachments: EmailAttachment[] = [];
+    if (pdfBase64) {
+      salaryAttachments.push({
+        filename: `${teacher.teacher_id}_Salary_Slip_${monthYear.replace(/[^a-zA-Z0-9]/g, '_')}.pdf`,
+        content: pdfBase64.split(',')[1] || pdfBase64,
+        encoding: 'base64'
+      });
     }
+
+    const salarySend = await sendTransactionalEmail({
+      to: recipientEmail,
+      subject,
+      text: bodyText,
+      html: htmlContent,
+      attachments: salaryAttachments.length ? salaryAttachments : undefined
+    });
+    const mailStatus = salarySend.status === 'Success' ? 'Success' : salarySend.status;
 
     const logEntry = {
       id: 'sal-log-' + Date.now(),
@@ -1900,13 +1857,10 @@ Principal, Unique School System`;
       isPlainTextBody: true
     });
 
-    let mailStatus = 'Simulated';
-    const transporter = createTransporter();
-
-    const attachments: any[] = [];
+    const profileAttachments: EmailAttachment[] = [];
 
     if (pdfBase64) {
-      attachments.push({
+      profileAttachments.push({
         filename: `${teacher.teacher_id}_Faculty_Profile.pdf`,
         content: pdfBase64.split(',')[1] || pdfBase64,
         encoding: 'base64'
@@ -1918,21 +1872,16 @@ Principal, Unique School System`;
       'teacher',
       teacher.teacher_id || teacher.id || 'Teacher'
     );
-    attachments.push(...galleryAttachments);
+    profileAttachments.push(...galleryAttachments);
 
-    if (transporter && recipientEmail.includes('@') && !recipientEmail.includes('example.com')) {
-      const mailOptions: any = {
-        from: `"${fromName}" <${fromEmail}>`,
-        to: recipientEmail,
-        subject: subject,
-        text: bodyText,
-        html: htmlContent,
-        attachments: attachments
-      };
-
-      await transporter.sendMail(mailOptions);
-      mailStatus = 'Success';
-    }
+    const profileSend = await sendTransactionalEmail({
+      to: recipientEmail,
+      subject,
+      text: bodyText,
+      html: htmlContent,
+      attachments: profileAttachments.length ? profileAttachments : undefined
+    });
+    const mailStatus = profileSend.status === 'Success' ? 'Success' : profileSend.status;
 
     const logEntry = {
       id: 'prof-log-' + Date.now(),
@@ -1973,13 +1922,40 @@ app.post('/api/email/fee-reminders', async (req, res) => {
       return res.status(400).json({ error: 'Defaulters array required.' });
     }
 
+    const branding = mergeSiteBranding(undefined, await loadSiteBranding());
     let dispatchedCount = 0;
     const logs: any[] = [];
 
     for (const d of defaulters) {
       const recipientEmail = d.is_orphan ? (d.donor_email || d.guardian_email) : d.guardian_email;
       const recipientName = d.is_orphan ? (d.donor_name || 'Donor') : d.guardian_name;
-      const amountDue = d.net_fee - d.paid_amount;
+      const amountDue = Number(d.net_fee || 0) - Number(d.paid_amount || 0);
+      const subject = `Fee Payment Reminder - ${d.student_name} (${d.month} ${d.year})`;
+      const bodyText = `Respected ${recipientName || 'Parent/Donor'},
+Assalam o Alaikum
+
+This is a fee payment reminder for ${d.student_name} for ${d.month} ${d.year}.
+Outstanding amount: PKR ${amountDue.toLocaleString()}
+
+Warm Regards,
+Unique School System`;
+
+      const htmlContent = buildBrandedEmailHtml({
+        headerTitle: 'Fee Payment Reminder',
+        body: bodyText,
+        footer: branding.footer_subtitle,
+        branding,
+        isPlainTextBody: true
+      });
+
+      const sendResult = recipientEmail
+        ? await sendTransactionalEmail({
+            to: recipientEmail,
+            subject,
+            text: bodyText,
+            html: htmlContent
+          })
+        : { status: 'Failed' as const, error: 'No recipient email' };
 
       const log = {
         id: 'fee-rem-' + Date.now() + Math.random().toString(36).slice(2, 6),
@@ -1988,12 +1964,12 @@ app.post('/api/email/fee-reminders', async (req, res) => {
         recipient_type: d.is_orphan ? 'Donor' : 'Guardian',
         recipient_name: recipientName,
         student_name: d.student_name,
-        subject: `Fee Payment Reminder - ${d.student_name} (${d.month} ${d.year})`,
+        subject,
         term_name: `${d.month} ${d.year}`,
-        status: 'Simulated'
+        status: sendResult.status === 'Success' ? 'Success' : sendResult.status
       };
       logs.push(log);
-      dispatchedCount++;
+      if (sendResult.status === 'Success') dispatchedCount++;
     }
 
     for (const log of logs) {
@@ -2001,10 +1977,10 @@ app.post('/api/email/fee-reminders', async (req, res) => {
     }
 
     res.json({
-      success: true,
+      success: dispatchedCount > 0 || logs.length === 0,
       dispatchedCount,
       logs,
-      message: `Successfully dispatched ${dispatchedCount} fee reminder emails via Brevo SMTP Gateway!`
+      message: `Dispatched ${dispatchedCount} of ${defaulters.length} fee reminder email(s) via Brevo.`
     });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
@@ -2182,6 +2158,16 @@ app.post('/api/supabase/upload', async (req, res) => {
 // Fetch Email Logs
 app.get('/api/email/logs', (req, res) => {
   res.json({ logs: emailLogs });
+});
+
+// Email connectivity diagnostic (for Render deployment troubleshooting)
+app.get('/api/email/health', async (_req, res) => {
+  try {
+    const status = await verifyEmailConnectivity();
+    res.json({ success: status.ok, ...status });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
 });
 
 // Groq AI Assistant — school system help only (replaces Gemini chat for AI Assistant tab)

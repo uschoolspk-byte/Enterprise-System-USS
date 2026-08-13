@@ -41,7 +41,7 @@ export const DocumentPreviewModal: React.FC<DocumentPreviewModalProps> = ({
       setViewMode('embedded');
 
       try {
-        const resolved = url.startsWith('/api/')
+        const resolved = isPDFUrl(url) || url.startsWith('/api/')
           ? await resolveDocumentPreviewUrl(url)
           : getPDFViewerUrl(url) || url;
         if (!active) {
