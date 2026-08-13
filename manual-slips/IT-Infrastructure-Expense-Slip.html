@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Unique School System — Expense Slip</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: Georgia, 'Times New Roman', serif;
+      background: #e2e8f0;
+      color: #0f172a;
+      padding: 24px;
+    }
+    .no-print {
+      max-width: 210mm;
+      margin: 0 auto 16px;
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    .no-print button {
+      padding: 10px 18px;
+      font-size: 14px;
+      font-weight: 700;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      background: #1e3a8a;
+      color: #fff;
+    }
+    .no-print button.secondary { background: #475569; }
+    .no-print p { font-family: Arial, sans-serif; font-size: 12px; color: #475569; width: 100%; }
+
+    .slip {
+      max-width: 210mm;
+      min-height: 297mm;
+      margin: 0 auto;
+      background: #fff;
+      padding: 14mm 16mm;
+      box-shadow: 0 8px 30px rgba(0,0,0,.12);
+    }
+
+    .header {
+      background: #1e3a8a;
+      color: #fff;
+      padding: 14px 16px;
+      margin: -14mm -16mm 20px;
+    }
+    .header h1 { font-size: 20px; letter-spacing: .5px; }
+    .header p { font-size: 11px; opacity: .9; margin-top: 4px; font-family: Arial, sans-serif; }
+
+    .meta {
+      display: flex;
+      justify-content: space-between;
+      gap: 16px;
+      margin-bottom: 18px;
+      font-family: Arial, sans-serif;
+      font-size: 12px;
+    }
+    .meta label { display: block; font-weight: 700; margin-bottom: 4px; color: #334155; }
+    .meta input, .meta select {
+      border: none;
+      border-bottom: 1px solid #94a3b8;
+      padding: 4px 0;
+      font-size: 13px;
+      min-width: 140px;
+      background: transparent;
+    }
+
+    h2 {
+      font-size: 15px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: #1e3a8a;
+      border-bottom: 2px solid #cbd5e1;
+      padding-bottom: 6px;
+      margin-bottom: 14px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-family: Arial, sans-serif;
+      font-size: 12px;
+      margin-bottom: 18px;
+    }
+    th {
+      background: #1e3a8a;
+      color: #fff;
+      text-align: left;
+      padding: 8px 10px;
+      font-size: 11px;
+    }
+    td {
+      border: 1px solid #cbd5e1;
+      padding: 9px 10px;
+      vertical-align: top;
+    }
+    tr:nth-child(even) td { background: #f8fafc; }
+    .amount { text-align: right; font-weight: 700; white-space: nowrap; }
+
+    .summary {
+      margin-left: auto;
+      width: 100%;
+      max-width: 320px;
+      font-family: Arial, sans-serif;
+      font-size: 13px;
+      border: 2px solid #1e3a8a;
+      padding: 12px 14px;
+      margin-bottom: 20px;
+    }
+    .summary-row {
+      display: flex;
+      justify-content: space-between;
+      padding: 5px 0;
+      border-bottom: 1px dashed #cbd5e1;
+    }
+    .summary-row:last-child { border-bottom: none; font-weight: 800; font-size: 14px; color: #1e3a8a; }
+
+    .optional {
+      margin-bottom: 16px;
+      font-family: Arial, sans-serif;
+      font-size: 12px;
+    }
+    .optional label { display: flex; align-items: center; gap: 8px; cursor: pointer; }
+    .optional .domain-row { opacity: .45; transition: opacity .2s; margin-top: 8px; }
+    .optional .domain-row.active { opacity: 1; }
+
+    .notes {
+      font-family: Arial, sans-serif;
+      font-size: 11px;
+      color: #475569;
+      line-height: 1.55;
+      margin-bottom: 28px;
+    }
+    .notes li { margin-left: 18px; margin-bottom: 4px; }
+
+    .signatures {
+      display: flex;
+      justify-content: space-between;
+      gap: 40px;
+      margin-top: 36px;
+      font-family: Arial, sans-serif;
+      font-size: 11px;
+    }
+    .sig-line {
+      border-top: 1px solid #0f172a;
+      padding-top: 6px;
+      min-width: 180px;
+    }
+
+    .footer {
+      margin-top: 30px;
+      padding-top: 10px;
+      border-top: 1px solid #cbd5e1;
+      font-family: Arial, sans-serif;
+      font-size: 10px;
+      color: #64748b;
+      text-align: center;
+    }
+
+    @media print {
+      body { background: #fff; padding: 0; }
+      .no-print { display: none !important; }
+      .slip { box-shadow: none; max-width: none; min-height: auto; }
+      .meta input, .meta select { border-bottom: 1px solid #000; }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="no-print">
+    <button type="button" onclick="window.print()">Print / Save as PDF</button>
+    <button type="button" class="secondary" onclick="toggleDomain()">Toggle domain line</button>
+    <p>Open this file in any browser → Print → “Save as PDF”. Not connected to USS app.</p>
+  </div>
+
+  <div class="slip">
+    <div class="header">
+      <h1>UNIQUE SCHOOL SYSTEM</h1>
+      <p>School Management &amp; Records — Monthly Expense Slip | Principal: Tahir Azad</p>
+    </div>
+
+    <div class="meta">
+      <div>
+        <label>Receipt No.</label>
+        <input type="text" value="SCH-2026-___" />
+      </div>
+      <div>
+        <label>Date</label>
+        <input type="date" id="slipDate" />
+      </div>
+      <div>
+        <label>Billing Month</label>
+        <input type="month" id="billingMonth" />
+      </div>
+      <div>
+        <label>Payment Mode</label>
+        <select>
+          <option>Online / Card</option>
+          <option>Bank Transfer</option>
+          <option>Cash</option>
+        </select>
+      </div>
+    </div>
+
+    <h2>School Operational Expenses</h2>
+
+    <table>
+      <thead>
+        <tr>
+          <th style="width:36px">#</th>
+          <th>Description</th>
+          <th>Vendor</th>
+          <th>Billing</th>
+          <th style="width:110px">Amount</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>1</td>
+          <td>Online Student &amp; School Records Database — <strong>Pro Plan</strong></td>
+          <td>Supabase Inc.</td>
+          <td>Monthly (attendance, fees, results storage)</td>
+          <td class="amount">USD 25.00</td>
+        </tr>
+        <tr>
+          <td>2</td>
+          <td>School Portal Web Hosting — <strong>Starter Plan</strong></td>
+          <td>Render.com</td>
+          <td>Monthly (school management system access)</td>
+          <td class="amount">USD 7.00</td>
+        </tr>
+        <tr id="domainRow" class="domain-hidden" style="display:none">
+          <td>3</td>
+          <td>School Website Domain Name <em>(optional)</em></td>
+          <td>Domain Registrar</td>
+          <td>
+            <label style="font-weight:normal"><input type="radio" name="yrs" checked /> 1 year</label>
+            &nbsp;
+            <label style="font-weight:normal"><input type="radio" name="yrs" /> 2 years</label>
+            &nbsp;— PKR 7,000 total
+          </td>
+          <td class="amount">PKR 7,000.00</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="optional no-print">
+      <label>
+        <input type="checkbox" id="includeDomain" onchange="syncDomainRow()" />
+        Include domain expense on this slip (PKR 7,000)
+      </label>
+    </div>
+
+    <div class="summary">
+      <div class="summary-row">
+        <span>Database (Supabase Pro)</span>
+        <span>USD 25.00</span>
+      </div>
+      <div class="summary-row">
+        <span>Portal hosting (Render Starter)</span>
+        <span>USD 7.00</span>
+      </div>
+      <div class="summary-row">
+        <span><strong>Monthly subtotal</strong></span>
+        <span><strong>USD 32.00</strong></span>
+      </div>
+      <div class="summary-row">
+        <span>Monthly subtotal in PKR (@ 280/USD)</span>
+        <span id="monthlyPkr">PKR 8,960</span>
+      </div>
+      <div class="summary-row" id="domainSummary" style="display:none">
+        <span>Domain name (one-time)</span>
+        <span>PKR 7,000</span>
+      </div>
+      <div class="summary-row" id="grandTotalRow">
+        <span id="grandTotalLabel">Total payable (this month)</span>
+        <span id="grandTotalValue">PKR 8,960</span>
+      </div>
+    </div>
+
+    <ul class="notes">
+      <li>Online database: stores student attendance, fee records, exam results, and school documents securely.</li>
+      <li>Web hosting ($7/mo): keeps the school management portal available for staff daily use.</li>
+      <li>Domain is <strong>optional</strong> — the school portal can run on a free web address until a custom name is purchased.</li>
+      <li>This slip is for the school accounts office — operational cost of running the management system.</li>
+    </ul>
+
+    <div class="signatures">
+      <div>
+        <div class="sig-line">Prepared by / School Accounts</div>
+      </div>
+      <div>
+        <div class="sig-line">Tahir Azad — Principal</div>
+      </div>
+    </div>
+
+    <div class="footer">
+      Manual expense slip for Unique School System — internal school records only.
+    </div>
+  </div>
+
+  <script>
+    const USD_RATE = 280;
+    const MONTHLY_USD = 32;
+    const MONTHLY_PKR = MONTHLY_USD * USD_RATE;
+    const DOMAIN_PKR = 7000;
+
+    const today = new Date();
+    document.getElementById('slipDate').value = today.toISOString().slice(0, 10);
+    document.getElementById('billingMonth').value = today.toISOString().slice(0, 7);
+
+    function formatPkr(n) {
+      return 'PKR ' + n.toLocaleString('en-PK');
+    }
+
+    function syncDomainRow() {
+      const on = document.getElementById('includeDomain').checked;
+      document.getElementById('domainRow').style.display = on ? 'table-row' : 'none';
+      document.getElementById('domainSummary').style.display = on ? 'flex' : 'none';
+
+      const grandTotal = on ? MONTHLY_PKR + DOMAIN_PKR : MONTHLY_PKR;
+      document.getElementById('grandTotalValue').textContent = formatPkr(grandTotal);
+      document.getElementById('grandTotalLabel').textContent = on
+        ? 'Total payable (monthly + domain)'
+        : 'Total payable (this month)';
+    }
+
+    function toggleDomain() {
+      const cb = document.getElementById('includeDomain');
+      cb.checked = !cb.checked;
+      syncDomainRow();
+    }
+
+    syncDomainRow();
+  </script>
+</body>
+</html>

@@ -1,0 +1,6 @@
+{
+  "name": "Unique School System",
+  "description": "Production-grade School Management System with dynamic schema extensions, Brevo SMTP email engine, student and teacher hubs, attendance & payroll processing, fee management, batch result processing, and global Excel/PDF reporting.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
