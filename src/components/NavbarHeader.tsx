@@ -52,7 +52,7 @@ interface NavbarHeaderProps {
   onOpenActivityLogs?: () => void;
 }
 
-const GENERATE_RESULT_URL = 'https://results-2q6j.onrender.com';
+const GENERATE_RESULT_URL = 'https://results-uss.onrender.com';
 
 export const NavbarHeader: React.FC<NavbarHeaderProps> = ({
   activeTab,
