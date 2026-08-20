@@ -711,7 +711,9 @@ export function normalizeTeacherAttendanceListForDb(records: unknown[]): Record<
 }
 
 const PAYROLL_TABLE_COLUMNS = new Set([
-  'id', 'teacher_id', 'month', 'year', 'total_working_days', 'base_salary', 'present_count',
+  'id', 'teacher_id', 'month', 'year', 'month_start_date',
+  'total_working_days', 'daily_salary', 'half_day_deduction',
+  'base_salary', 'present_count',
   'absent_count', 'half_leave_count', 'hl_count', 'leave_count', 'absent_deduction', 'hl_deduction',
   'deductions', 'bonus', 'bonus_reason', 'net_salary', 'status', 'disbursed_date', 'payment_mode',
   'remarks', 'created_at'
@@ -725,11 +727,21 @@ export function normalizePayrollForDb(payroll: Record<string, unknown>): Record<
   row.teacher_id = withDefaultString(row.teacher_id, 'unknown');
   row.month = withDefaultString(row.month, 'January');
   row.year = typeof row.year === 'number' ? row.year : Number(row.year) || new Date().getFullYear();
+  row.total_working_days = typeof row.total_working_days === 'number' ? row.total_working_days : Number(row.total_working_days) || 26;
+  row.daily_salary = typeof row.daily_salary === 'number' ? row.daily_salary : Number(row.daily_salary) || 0;
+  row.half_day_deduction = typeof row.half_day_deduction === 'number' ? row.half_day_deduction : Number(row.half_day_deduction) || 0;
   row.base_salary = typeof row.base_salary === 'number' ? row.base_salary : Number(row.base_salary) || 0;
   row.net_salary = typeof row.net_salary === 'number' ? row.net_salary : Number(row.net_salary) || Number(row.base_salary) || 0;
   row.deductions = typeof row.deductions === 'number' ? row.deductions : Number(row.deductions) || 0;
+  row.absent_deduction = typeof row.absent_deduction === 'number' ? row.absent_deduction : Number(row.absent_deduction) || 0;
+  row.hl_deduction = typeof row.hl_deduction === 'number' ? row.hl_deduction : Number(row.hl_deduction) || 0;
+  row.absent_count = typeof row.absent_count === 'number' ? row.absent_count : Number(row.absent_count) || 0;
+  row.hl_count = typeof row.hl_count === 'number' ? row.hl_count : Number(row.hl_count) || 0;
   row.bonus = typeof row.bonus === 'number' ? row.bonus : Number(row.bonus) || 0;
   row.status = withDefaultString(row.status, 'Pending');
+  if (row.month_start_date !== undefined) {
+    row.month_start_date = normalizeOptionalDateForDb(row.month_start_date);
+  }
   if (row.disbursed_date !== undefined) {
     row.disbursed_date = normalizeOptionalDateForDb(row.disbursed_date);
   }

@@ -20,11 +20,92 @@ type DocumentSource = {
 export type EmailAttachment = { filename: string; content: string; encoding: 'base64' };
 
 function extFromMime(mime: string): string {
-  if (mime.includes('pdf')) return 'pdf';
-  if (mime.includes('png')) return 'png';
-  if (mime.includes('webp')) return 'webp';
-  if (mime.includes('jpeg') || mime.includes('jpg')) return 'jpg';
-  return 'bin';
+  const m = String(mime || '').toLowerCase();
+  if (m.includes('pdf')) return 'pdf';
+  if (m.includes('png')) return 'png';
+  if (m.includes('webp')) return 'webp';
+  if (m.includes('jpeg') || m.includes('jpg')) return 'jpg';
+  if (m.includes('gif')) return 'gif';
+  if (m.includes('bmp')) return 'bmp';
+  if (m.includes('tiff') || m.includes('tif')) return 'tiff';
+  if (m.includes('svg')) return 'svg';
+  if (m.includes('heic') || m.includes('heif')) return 'heic';
+  if (m.includes('msword') || m.includes('application/word')) return 'doc';
+  if (m.includes('openxmlformats-officedocument.wordprocessingml')) return 'docx';
+  if (m.includes('excel') || m.includes('spreadsheetml.sheet')) return 'xlsx';
+  if (m.includes('vnd.ms-excel')) return 'xls';
+  if (m.includes('powerpoint') || m.includes('presentationml.presentation')) return 'pptx';
+  if (m.includes('vnd.ms-powerpoint')) return 'ppt';
+  if (m.includes('rtf')) return 'rtf';
+  if (m.includes('plain') || m.includes('text/') && !m.includes('html') && !m.includes('csv')) return 'txt';
+  if (m.includes('csv')) return 'csv';
+  if (m.includes('html') || m.includes('htm')) return 'html';
+  if (m.includes('zip') || m.includes('compressed')) return 'zip';
+  if (m.includes('rar')) return 'rar';
+  if (m.includes('7z') || m.includes('7-zip')) return '7z';
+  if (m.includes('tar')) return 'tar';
+  if (m.includes('gz') || m.includes('gzip')) return 'gz';
+  if (m.includes('mp3') || m.includes('mpeg') && m.includes('audio')) return 'mp3';
+  if (m.includes('mp4') || m.includes('video/mp4')) return 'mp4';
+  if (m.includes('wav')) return 'wav';
+  if (m.includes('avi')) return 'avi';
+  if (m.includes('mov') || m.includes('quicktime')) return 'mov';
+  if (m.includes('json')) return 'json';
+  if (m.includes('xml')) return 'xml';
+  if (m.includes('vcard') || m.includes('vcf')) return 'vcf';
+  if (m.includes('ics')) return 'ics';
+  return '';
+}
+
+function extFromMagicBytes(buffer: Buffer | Uint8Array | string): string {
+  let bytes: Uint8Array;
+  if (typeof buffer === 'string') {
+    try {
+      const b64 = buffer.includes(',') ? buffer.split(',')[1] : buffer;
+      const binary = atob(b64);
+      const len = Math.min(binary.length, 16);
+      bytes = new Uint8Array(len);
+      for (let i = 0; i < len; i++) bytes[i] = binary.charCodeAt(i);
+    } catch {
+      return '';
+    }
+  } else if (Buffer.isBuffer(buffer)) {
+    const len = Math.min(buffer.length, 16);
+    bytes = new Uint8Array(len);
+    for (let i = 0; i < len; i++) bytes[i] = buffer[i];
+  } else {
+    const len = Math.min(buffer.length, 16);
+    bytes = buffer.slice(0, len);
+  }
+  const b = bytes;
+  if (b.length >= 4 && b[0] === 0x25 && b[1] === 0x50 && b[2] === 0x44 && b[3] === 0x46) return 'pdf';
+  if (b.length >= 8 && b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4E && b[3] === 0x47 && b[4] === 0x0D && b[5] === 0x0A && b[6] === 0x1A && b[7] === 0x0A) return 'png';
+  if (b.length >= 3 && b[0] === 0xFF && b[1] === 0xD8 && b[2] === 0xFF) return 'jpg';
+  if (b.length >= 6 && (b[0] === 0x47 && b[1] === 0x49 && b[2] === 0x46 && b[3] === 0x38 && (b[4] === 0x37 || b[4] === 0x39) && b[5] === 0x61)) return 'gif';
+  if (b.length >= 12 && b[8] === 0x57 && b[9] === 0x45 && b[10] === 0x42 && b[11] === 0x50) return 'webp';
+  if (b.length >= 2 && b[0] === 0x42 && b[1] === 0x4D) return 'bmp';
+  if (b.length >= 4 && b[0] === 0x50 && b[1] === 0x4B && b[2] === 0x03 && b[3] === 0x04) return 'zip';
+  if (b.length >= 8 && b[0] === 0x52 && b[1] === 0x61 && b[2] === 0x72 && b[3] === 0x21 && b[4] === 0x1A && b[5] === 0x07 && (b[6] === 0x00 || b[6] === 0x01)) return 'rar';
+  if (b.length >= 3 && b[0] === 0x1F && b[1] === 0x8B && b[2] === 0x08) return 'gz';
+  if (b.length >= 6 && b[0] === 0x75 && b[1] === 0x73 && b[2] === 0x74 && b[3] === 0x61 && b[4] === 0x72) return 'tar';
+  if (b.length >= 4 && (b[0] === 0x49 && b[1] === 0x49 && b[2] === 0x2A && b[3] === 0x00) || (b[0] === 0x4D && b[1] === 0x4D && b[2] === 0x00 && b[3] === 0x2A)) return 'tiff';
+  if (b.length >= 3 && (b[0] === 0x49 && b[1] === 0x44 && b[2] === 0x33) || (b[0] === 0x49 && b[1] === 0x44 && b[2] === 0x32)) return 'mp3';
+  if (b.length >= 12 && b[4] === 0x66 && b[5] === 0x74 && b[6] === 0x79 && b[7] === 0x70) return 'mp4';
+  if (b.length >= 4 && b[0] === 0x52 && b[1] === 0x49 && b[2] === 0x46 && b[3] === 0x46) return 'wav';
+  if (b.length >= 8 && (b[0] === 0x30 || b[0] === 0x31 || b[0] === 0x32) && b[1] === 0x00 && b[2] === 0x00 && b[3] === 0x00 && (b[4] === 0x66 && b[5] === 0x74 && b[6] === 0x79 && b[7] === 0x70)) return 'mov';
+  return '';
+}
+
+function resolveExtension(mime: string, buffer?: Buffer | Uint8Array | string, fallbackPathExt?: string): string {
+  const BLOCKED_EXTS = new Set(['bin', 'exe', 'bat', 'cmd', 'com', 'scr', 'pif', 'vbs', 'js', 'msi', 'reg', 'ps1']);
+  if (fallbackPathExt && !BLOCKED_EXTS.has(fallbackPathExt.toLowerCase())) return fallbackPathExt.toLowerCase();
+  const fromMime = extFromMime(mime);
+  if (fromMime) return fromMime;
+  if (buffer) {
+    const fromMagic = extFromMagicBytes(buffer);
+    if (fromMagic) return fromMagic;
+  }
+  return 'dat';
 }
 
 function safeFilenamePart(value: string): string {
@@ -213,7 +294,7 @@ export async function buildProfileDocumentGalleryAttachments(
 function attachmentFromDataUrl(url: string, baseName: string) {
   const match = url.match(/^data:([^;]+);base64,(.+)$/s);
   if (!match) return null;
-  const ext = extFromMime(match[1]);
+  const ext = resolveExtension(match[1], match[2]);
   return {
     filename: `${safeFilenamePart(baseName)}.${ext}`,
     content: match[2],
@@ -227,7 +308,7 @@ async function attachmentFromHttpUrl(url: string, baseName: string) {
     if (!res.ok) return null;
     const buffer = Buffer.from(await res.arrayBuffer());
     const ct = res.headers.get('content-type') || '';
-    const ext = extFromMime(ct);
+    const ext = resolveExtension(ct, buffer);
     return {
       filename: `${safeFilenamePart(baseName)}.${ext}`,
       content: buffer.toString('base64'),
@@ -247,7 +328,8 @@ async function attachmentFromStoragePath(storagePath: string, bucketName: string
     if (!download.ok || !download.buffer) return null;
 
     const pathExt = storagePath.split('.').pop();
-    const ext = pathExt && pathExt.length <= 5 ? pathExt : extFromMime(download.contentType || '');
+    const validatedPathExt = pathExt && pathExt.length <= 5 ? pathExt : undefined;
+    const ext = resolveExtension(download.contentType || '', download.buffer, validatedPathExt);
     return {
       filename: `${safeFilenamePart(baseName)}.${ext}`,
       content: download.buffer.toString('base64'),
@@ -271,7 +353,8 @@ async function attachmentFromSupabaseFileUrl(url: string, baseName: string) {
     if (!download.ok || !download.buffer) return null;
 
     const pathExt = storagePath.split('.').pop();
-    const ext = pathExt && pathExt.length <= 5 ? pathExt : extFromMime(download.contentType || '');
+    const validatedPathExt = pathExt && pathExt.length <= 5 ? pathExt : undefined;
+    const ext = resolveExtension(download.contentType || '', download.buffer, validatedPathExt);
     return {
       filename: `${safeFilenamePart(baseName)}.${ext}`,
       content: download.buffer.toString('base64'),

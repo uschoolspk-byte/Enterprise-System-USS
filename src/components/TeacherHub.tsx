@@ -35,6 +35,14 @@ import { DocumentGallery } from './DocumentGallery';
 import { collectTeacherDocuments, readFileAsDataUrl } from '../lib/documentGalleryUtils';
 import { uploadDrawerDocument } from '../lib/drawerDocumentUpload';
 import { DynamicFieldSection, validateDynamicFieldValues } from './DynamicFieldSection';
+import {
+  resolveTotalWorkingDays,
+  calcDailySalary,
+  calcHalfDayDeduction,
+  calcAbsentDeduction,
+  calcHlDeduction,
+  defaultMonthStartDate
+} from '../lib/payrollUtils';
 
 interface TeacherHubProps {
   teachers: Teacher[];
@@ -87,12 +95,18 @@ export const TeacherHub: React.FC<TeacherHubProps> = ({
   const [showSalaryModal, setShowSalaryModal] = useState<boolean>(false);
   const [salaryMonth, setSalaryMonth] = useState<string>('August');
   const [salaryYear, setSalaryYear] = useState<number>(2026);
+  const [salaryMonthStartDate, setSalaryMonthStartDate] = useState<string>(defaultMonthStartDate('August', 2026));
+  const [salaryTotalWorkingDays, setSalaryTotalWorkingDays] = useState<number>(26);
   const [salaryBonus, setSalaryBonus] = useState<number>(0);
   const [salaryBonusReason, setSalaryBonusReason] = useState<string>('');
   const [salaryDeductions, setSalaryDeductions] = useState<number>(0);
   const [salaryRemarks, setSalaryRemarks] = useState<string>('');
   const [salaryDispatchEmail, setSalaryDispatchEmail] = useState<boolean>(true);
   const [isProcessingSalary, setIsProcessingSalary] = useState<boolean>(false);
+
+  useEffect(() => {
+    setSalaryMonthStartDate(defaultMonthStartDate(salaryMonth, salaryYear));
+  }, [salaryMonth, salaryYear]);
 
   // Share Faculty Profile Modal State
   const [shareModalTeacher, setShareModalTeacher] = useState<Teacher | null>(null);
@@ -305,16 +319,40 @@ export const TeacherHub: React.FC<TeacherHubProps> = ({
     const baseSal = selectedTeacher.base_salary || 0;
     const bonusVal = Number(salaryBonus) || 0;
     const dedVal = Number(salaryDeductions) || 0;
-    const netSal = Math.max(0, baseSal - dedVal + bonusVal);
+    const workingDays = resolveTotalWorkingDays(salaryTotalWorkingDays);
+    const daily = calcDailySalary(baseSal, workingDays);
+    const halfDay = calcHalfDayDeduction(baseSal, workingDays);
+
+    const records = attendanceList.filter(a => a.teacher_id === selectedTeacher.id);
+    const absentCount = records.filter(a => a.status === 'A').length;
+    const hlCount = records.filter(a => a.status === 'HL').length;
+    const leaveCount = records.filter(a => a.status === 'L').length;
+    const presentCount = records.filter(a => a.status === 'P').length;
+
+    const absentDed = calcAbsentDeduction(absentCount, baseSal, workingDays);
+    const hlDed = calcHlDeduction(hlCount, baseSal, workingDays);
+    const autoDed = absentDed + hlDed;
+    const explicitDed = dedVal > autoDed ? dedVal : autoDed;
+    const netSal = Math.max(0, baseSal + bonusVal - explicitDed);
 
     const newPayroll: Payroll = {
       id: 'pay-' + Date.now(),
       teacher_id: selectedTeacher.id,
       month: salaryMonth,
       year: Number(salaryYear) || 2026,
+      month_start_date: salaryMonthStartDate || defaultMonthStartDate(salaryMonth, Number(salaryYear) || 2026),
+      total_working_days: workingDays,
+      daily_salary: daily,
+      half_day_deduction: halfDay,
       base_salary: baseSal,
-      absent_count: 0,
-      deductions: dedVal,
+      present_count: presentCount,
+      absent_count: absentCount,
+      half_leave_count: hlCount,
+      hl_count: hlCount,
+      leave_count: leaveCount,
+      absent_deduction: absentDed,
+      hl_deduction: hlDed,
+      deductions: explicitDed,
       bonus: bonusVal,
       bonus_reason: salaryBonusReason,
       net_salary: netSal,
@@ -1698,10 +1736,55 @@ export const TeacherHub: React.FC<TeacherHubProps> = ({
                 </div>
               </div>
 
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Month Start Date</label>
+                  <input
+                    type="date"
+                    value={salaryMonthStartDate || defaultMonthStartDate(salaryMonth, salaryYear)}
+                    onChange={e => setSalaryMonthStartDate(e.target.value || defaultMonthStartDate(salaryMonth, salaryYear))}
+                    className="w-full px-3 py-2 border rounded-xl font-bold bg-slate-50 text-slate-900"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Total Working Days</label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={31}
+                    value={salaryTotalWorkingDays}
+                    onChange={e => setSalaryTotalWorkingDays(Math.min(31, Math.max(1, Number(e.target.value) || 26)))}
+                    className="w-full px-3 py-2 border rounded-xl font-bold bg-slate-50 text-slate-900"
+                  />
+                </div>
+              </div>
+
               <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-1">
                 <div className="flex justify-between">
                   <span className="text-slate-600 font-medium">Base Monthly Salary:</span>
                   <strong className="text-slate-900 font-mono">PKR {(selectedTeacher.base_salary || 0).toLocaleString()}</strong>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3 bg-slate-50 border border-slate-200 rounded-xl p-3">
+                <div className="text-[11px]">
+                  <span className="font-black text-slate-700 block">Daily Salary</span>
+                  <span className="text-blue-900 font-extrabold text-sm">
+                    PKR {calcDailySalary(selectedTeacher.base_salary || 0, salaryTotalWorkingDays).toLocaleString()}
+                  </span>
+                  <span className="block text-[9px] text-slate-400">
+                    Base ÷ {resolveTotalWorkingDays(salaryTotalWorkingDays)} working days
+                  </span>
+                </div>
+                <div className="text-[11px]">
+                  <span className="font-black text-slate-700 block">Half-Day Deduction</span>
+                  <span className="text-amber-600 font-extrabold text-sm">
+                    PKR {calcHalfDayDeduction(selectedTeacher.base_salary || 0, salaryTotalWorkingDays).toLocaleString()}
+                  </span>
+                  <span className="block text-[9px] text-slate-400">
+                    (Daily Salary ÷ 2) per HL attendance
+                  </span>
                 </div>
               </div>
 
@@ -1756,7 +1839,18 @@ export const TeacherHub: React.FC<TeacherHubProps> = ({
               <div className="p-3 bg-emerald-50 rounded-2xl border border-emerald-200 flex justify-between items-center">
                 <span className="font-extrabold text-emerald-950 uppercase text-[11px]">Calculated Net Salary Disbursed:</span>
                 <span className="text-base font-black text-emerald-800 font-mono">
-                  PKR {Math.max(0, (selectedTeacher.base_salary || 0) - salaryDeductions + salaryBonus).toLocaleString()}
+                  PKR {Math.max(0, (selectedTeacher.base_salary || 0) + (Number(salaryBonus) || 0) - (
+                    (() => {
+                      const wd = resolveTotalWorkingDays(salaryTotalWorkingDays);
+                      const bs = selectedTeacher.base_salary || 0;
+                      const recs = attendanceList.filter(a => a.teacher_id === selectedTeacher.id);
+                      const absDed = calcAbsentDeduction(recs.filter(a => a.status === 'A').length, bs, wd);
+                      const hlDed = calcHlDeduction(recs.filter(a => a.status === 'HL').length, bs, wd);
+                      const autoD = absDed + hlDed;
+                      const manD = Number(salaryDeductions) || 0;
+                      return manD > autoD ? manD : autoD;
+                    })()
+                  )).toLocaleString()}
                 </span>
               </div>
 

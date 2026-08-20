@@ -494,7 +494,7 @@ export function generatePaySlipPDF(teacher: Teacher, payroll: Payroll): jsPDF {
   const teacherDetails = [
     ['Full Name', teacher?.full_name || 'N/A', 'CNIC Number', teacher?.cnic || 'N/A'],
     ['Assigned Classes', teacher?.classes_assigned || 'N/A', 'Joining Date', teacher?.joining_date || 'N/A'],
-    ['Base Salary Scale', `PKR ${(teacher?.base_salary ?? 0).toLocaleString()}`, 'Disbursement State', payroll?.status || 'Pending']
+    ['Payroll Start Date', payroll?.month_start_date || `${payroll?.month} 1, ${payroll?.year}`, 'Disbursement State', payroll?.status || 'Pending']
   ];
 
   autoTable(doc, {
@@ -506,9 +506,13 @@ export function generatePaySlipPDF(teacher: Teacher, payroll: Payroll): jsPDF {
 
   const payrollBreakdown = [
     ['Total Monthly Working Days', `${payroll?.total_working_days ?? 26} Days`],
+    ['Daily Salary Rate (Base ÷ Working Days)', `PKR ${(payroll?.daily_salary ?? 0).toLocaleString()} / day`],
+    ['Half-Day Deduction Rate (Daily ÷ 2)', `PKR ${(payroll?.half_day_deduction ?? 0).toLocaleString()} / HL`],
+    ['Present Days Count', `${payroll?.present_count ?? ((payroll?.total_working_days ?? 26) - (payroll?.absent_count ?? 0))} Days`],
     ['Absences Logged (100% Deduction)', `${payroll?.absent_count ?? 0} Days (- PKR ${(payroll?.absent_deduction ?? 0).toLocaleString()})`],
-    ['Half Leaves Logged (50% Deduction)', `${payroll?.hl_count ?? 0} Days (- PKR ${(payroll?.hl_deduction ?? 0).toLocaleString()})`],
+    ['Half Leaves Logged (50% Deduction)', `${payroll?.hl_count ?? payroll?.half_leave_count ?? 0} Days (- PKR ${(payroll?.hl_deduction ?? 0).toLocaleString()})`],
     ['Performance Bonus / Allowances', `+ PKR ${(payroll?.bonus ?? 0).toLocaleString()}`],
+    ['Base Monthly Salary Scale', `PKR ${(payroll?.base_salary ?? teacher?.base_salary ?? 0).toLocaleString()}`],
     ['FINAL NET SALARY DISBURSED', `PKR ${(payroll?.net_salary ?? 0).toLocaleString()}`]
   ];
 

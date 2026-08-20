@@ -48,13 +48,41 @@ export function inferDocumentExt(dataUrlOrMime: string, fileName?: string): stri
   }
 
   const mimeMatch = dataUrlOrMime.match(/^data:([^;]+);/);
-  const mime = mimeMatch?.[1] || dataUrlOrMime;
+  const mime = (mimeMatch?.[1] || dataUrlOrMime).toLowerCase();
   if (mime.includes('pdf')) return 'pdf';
   if (mime.includes('png')) return 'png';
   if (mime.includes('webp')) return 'webp';
   if (mime.includes('gif')) return 'gif';
   if (mime.includes('jpeg') || mime.includes('jpg')) return 'jpg';
-  return 'bin';
+  if (mime.includes('bmp')) return 'bmp';
+  if (mime.includes('tiff') || mime.includes('tif')) return 'tiff';
+  if (mime.includes('svg')) return 'svg';
+  if (mime.includes('heic') || mime.includes('heif')) return 'heic';
+  if (mime.includes('msword') || mime.includes('application/word')) return 'doc';
+  if (mime.includes('openxmlformats-officedocument.wordprocessingml')) return 'docx';
+  if (mime.includes('excel') || mime.includes('spreadsheetml.sheet')) return 'xlsx';
+  if (mime.includes('vnd.ms-excel')) return 'xls';
+  if (mime.includes('powerpoint') || mime.includes('presentationml.presentation')) return 'pptx';
+  if (mime.includes('vnd.ms-powerpoint')) return 'ppt';
+  if (mime.includes('rtf')) return 'rtf';
+  if (mime.includes('plain') || (mime.includes('text/') && !mime.includes('html') && !mime.includes('csv'))) return 'txt';
+  if (mime.includes('csv')) return 'csv';
+  if (mime.includes('html') || mime.includes('htm')) return 'html';
+  if (mime.includes('zip') || mime.includes('compressed')) return 'zip';
+  if (mime.includes('rar')) return 'rar';
+  if (mime.includes('7z') || mime.includes('7-zip')) return '7z';
+  if (mime.includes('tar')) return 'tar';
+  if (mime.includes('gz') || mime.includes('gzip')) return 'gz';
+  if (mime.includes('mp3') || (mime.includes('mpeg') && mime.includes('audio'))) return 'mp3';
+  if (mime.includes('mp4') || mime.includes('video/mp4')) return 'mp4';
+  if (mime.includes('wav')) return 'wav';
+  if (mime.includes('avi')) return 'avi';
+  if (mime.includes('mov') || mime.includes('quicktime')) return 'mov';
+  if (mime.includes('json')) return 'json';
+  if (mime.includes('xml')) return 'xml';
+  if (mime.includes('vcard') || mime.includes('vcf')) return 'vcf';
+  if (mime.includes('ics')) return 'ics';
+  return 'dat';
 }
 
 /** Replace oversized data URLs with persisted remote URLs when storage is confirmed. */
@@ -66,9 +94,9 @@ export function normalizeGalleryDocForStore(doc: GalleryDocRecord): GalleryDocRe
   const bucket = doc.storage_bucket || ENTITY_DOCS_BUCKET;
 
   if (doc.storage_path && doc.storage_persisted !== false) {
+    if (isRemoteDocumentUrl(doc.url)) return doc;
     const url = doc.url;
-    if (isRemoteDocumentUrl(url)) return doc;
-    if (!url || url.startsWith('data:') || url.length > 4000) {
+    if (!url || typeof url !== 'string' || url.startsWith('data:') || url.length > 4000) {
       return {
         ...doc,
         url: buildEntityDocProxyUrl(doc.storage_path, bucket)

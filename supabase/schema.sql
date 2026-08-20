@@ -141,7 +141,10 @@ CREATE TABLE IF NOT EXISTS public.payrolls (
   teacher_id text NOT NULL,
   month text NOT NULL,
   year integer NOT NULL,
+  month_start_date text,
   total_working_days integer,
+  daily_salary numeric DEFAULT 0,
+  half_day_deduction numeric DEFAULT 0,
   base_salary numeric DEFAULT 0,
   present_count integer,
   absent_count integer DEFAULT 0,
@@ -163,6 +166,11 @@ CREATE TABLE IF NOT EXISTS public.payrolls (
 
 ALTER TABLE public.payrolls ADD COLUMN IF NOT EXISTS hl_count integer DEFAULT 0;
 ALTER TABLE public.payrolls ADD COLUMN IF NOT EXISTS leave_count integer;
+ALTER TABLE public.payrolls ADD COLUMN IF NOT EXISTS month_start_date text;
+ALTER TABLE public.payrolls ADD COLUMN IF NOT EXISTS daily_salary numeric DEFAULT 0;
+ALTER TABLE public.payrolls ADD COLUMN IF NOT EXISTS half_day_deduction numeric DEFAULT 0;
+ALTER TABLE public.payrolls ADD COLUMN IF NOT EXISTS present_count integer;
+ALTER TABLE public.payrolls ADD COLUMN IF NOT EXISTS half_leave_count integer;
 
 -- =============================================================================
 -- EXAM RESULTS

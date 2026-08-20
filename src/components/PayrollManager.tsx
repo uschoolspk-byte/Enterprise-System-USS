@@ -31,7 +31,13 @@ import {
   buildWaivedPayroll,
   formatSalaryPeriod,
   sortPayrollsByPeriodDesc,
-  getTeacherPaidPayrolls
+  getTeacherPaidPayrolls,
+  resolveTotalWorkingDays,
+  calcDailySalary,
+  calcHalfDayDeduction,
+  calcAbsentDeduction,
+  calcHlDeduction,
+  defaultMonthStartDate
 } from '../lib/payrollUtils';
 
 interface PayrollManagerProps {
@@ -47,6 +53,8 @@ type PendingManualPayroll = {
   teacherId: string;
   month: string;
   year: number;
+  monthStartDate: string;
+  totalWorkingDays: number;
   base: number;
   deductions: number;
   bonus: number;
@@ -68,7 +76,8 @@ export const PayrollManager: React.FC<PayrollManagerProps> = ({
 }) => {
   const [selectedMonth, setSelectedMonth] = useState('August');
   const [selectedYear, setSelectedYear] = useState(2026);
-  const [totalDaysInMonth, setTotalDaysInMonth] = useState(30);
+  const [monthStartDate, setMonthStartDate] = useState<string>(defaultMonthStartDate('August', 2026));
+  const [totalWorkingDays, setTotalWorkingDays] = useState<number>(26);
 
   // Filter State: 'all' | 'paid' | 'pending'
   const [statusFilter, setStatusFilter] = useState<'all' | 'paid' | 'pending'>('all');
@@ -80,6 +89,8 @@ export const PayrollManager: React.FC<PayrollManagerProps> = ({
   const [manualTeacherId, setManualTeacherId] = useState(teachers[0]?.id || '');
   const [manualMonth, setManualMonth] = useState('August');
   const [manualYear, setManualYear] = useState(2026);
+  const [manualMonthStartDate, setManualMonthStartDate] = useState<string>(defaultMonthStartDate('August', 2026));
+  const [manualTotalWorkingDays, setManualTotalWorkingDays] = useState<number>(26);
   const [manualBase, setManualBase] = useState(55000);
   const [manualDeductions, setManualDeductions] = useState(0);
   const [manualBonus, setManualBonus] = useState(0);
@@ -109,6 +120,14 @@ export const PayrollManager: React.FC<PayrollManagerProps> = ({
   const [missedMonthRemarks, setMissedMonthRemarks] = useState('');
 
   const [monthYearFilter, setMonthYearFilter] = useState<{ month: string; year: number } | null>(null);
+
+  useEffect(() => {
+    setMonthStartDate(defaultMonthStartDate(selectedMonth, selectedYear));
+  }, [selectedMonth, selectedYear]);
+
+  useEffect(() => {
+    setManualMonthStartDate(defaultMonthStartDate(manualMonth, manualYear));
+  }, [manualMonth, manualYear]);
 
   useEffect(() => {
     return () => {
@@ -158,10 +177,12 @@ export const PayrollManager: React.FC<PayrollManagerProps> = ({
     const hlCount = records.filter(a => a.status === 'HL').length;
     const leaveCount = records.filter(a => a.status === 'L').length;
     const presentCount = records.filter(a => a.status === 'P').length;
-    const perDayRate = teacher.base_salary / totalDaysInMonth;
-    const absentDeduction = absentCount * perDayRate;
-    const hlDeduction = hlCount * (0.5 * perDayRate);
-    const totalDeductions = Math.round(absentDeduction + hlDeduction);
+    const workingDays = resolveTotalWorkingDays(totalWorkingDays);
+    const daily = calcDailySalary(teacher.base_salary, workingDays);
+    const halfDay = calcHalfDayDeduction(teacher.base_salary, workingDays);
+    const absentDed = calcAbsentDeduction(absentCount, teacher.base_salary, workingDays);
+    const hlDed = calcHlDeduction(hlCount, teacher.base_salary, workingDays);
+    const totalDeductions = Math.round(absentDed + hlDed);
     const netSalary = Math.max(0, Math.round(teacher.base_salary - totalDeductions));
 
     return {
@@ -169,11 +190,18 @@ export const PayrollManager: React.FC<PayrollManagerProps> = ({
       teacher_id: teacher.id,
       month,
       year,
+      month_start_date: defaultMonthStartDate(month, year),
+      total_working_days: workingDays,
+      daily_salary: daily,
+      half_day_deduction: halfDay,
       base_salary: teacher.base_salary,
       present_count: presentCount,
       absent_count: absentCount,
       half_leave_count: hlCount,
+      hl_count: hlCount,
       leave_count: leaveCount,
+      absent_deduction: absentDed,
+      hl_deduction: hlDed,
       deductions: totalDeductions,
       net_salary: netSalary,
       disbursed_date: new Date().toISOString().slice(0, 10),
@@ -214,13 +242,24 @@ export const PayrollManager: React.FC<PayrollManagerProps> = ({
     }
 
     const netSalary = Math.max(0, (data.base + data.bonus) - data.deductions);
+    const workingDays = resolveTotalWorkingDays(data.totalWorkingDays);
+    const daily = calcDailySalary(data.base, workingDays);
+    const halfDay = calcHalfDayDeduction(data.base, workingDays);
+    const absentDed = calcAbsentDeduction(0, data.base, workingDays);
+    const hlDed = calcHlDeduction(0, data.base, workingDays);
     const newEntry: Payroll = {
       id: 'pay-manual-' + Date.now(),
       teacher_id: teacher.id,
       month: data.month,
       year: data.year,
+      month_start_date: data.monthStartDate || defaultMonthStartDate(data.month, data.year),
+      total_working_days: workingDays,
+      daily_salary: daily,
+      half_day_deduction: halfDay,
       base_salary: data.base,
       absent_count: 0,
+      absent_deduction: absentDed,
+      hl_deduction: hlDed,
       deductions: data.deductions,
       bonus: data.bonus,
       bonus_reason: data.bonusReason,
@@ -381,6 +420,8 @@ export const PayrollManager: React.FC<PayrollManagerProps> = ({
       teacherId: manualTeacherId,
       month: manualMonth,
       year: manualYear,
+      monthStartDate: manualMonthStartDate || defaultMonthStartDate(manualMonth, manualYear),
+      totalWorkingDays: manualTotalWorkingDays,
       base: manualBase,
       deductions: manualDeductions,
       bonus: manualBonus,
@@ -394,9 +435,27 @@ export const PayrollManager: React.FC<PayrollManagerProps> = ({
     e.preventDefault();
     if (!editingPayroll) return;
 
-    const netSalary = Math.max(0, (editingPayroll.base_salary + (editingPayroll.bonus || 0)) - (editingPayroll.deductions || 0));
+    const workingDays = resolveTotalWorkingDays(editingPayroll.total_working_days);
+    const daily = calcDailySalary(editingPayroll.base_salary, workingDays);
+    const halfDay = calcHalfDayDeduction(editingPayroll.base_salary, workingDays);
+    const absCount = editingPayroll.absent_count || 0;
+    const hlC = editingPayroll.hl_count ?? editingPayroll.half_leave_count ?? 0;
+    const absentDed = calcAbsentDeduction(absCount, editingPayroll.base_salary, workingDays);
+    const hlDed = calcHlDeduction(Number(hlC), editingPayroll.base_salary, workingDays);
+    const autoDed = absentDed + hlDed;
+    const explicitDed = typeof editingPayroll.deductions === 'number' && editingPayroll.deductions > autoDed
+      ? editingPayroll.deductions
+      : autoDed;
+    const netSalary = Math.max(0, (editingPayroll.base_salary + (editingPayroll.bonus || 0)) - explicitDed);
     const updated: Payroll = {
       ...editingPayroll,
+      total_working_days: workingDays,
+      daily_salary: daily,
+      half_day_deduction: halfDay,
+      absent_deduction: absentDed,
+      hl_deduction: hlDed,
+      hl_count: Number(hlC),
+      deductions: explicitDed,
       net_salary: netSalary
     };
 
@@ -679,6 +738,30 @@ export const PayrollManager: React.FC<PayrollManagerProps> = ({
               className="w-20 px-3 py-2 rounded-xl border border-slate-300 text-xs font-bold bg-slate-50"
             />
 
+            <label className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-slate-300 bg-slate-50">
+              <Calendar className="w-3.5 h-3.5 text-blue-900" />
+              <span className="text-[10px] font-bold text-slate-600">Month Start:</span>
+              <input
+                type="date"
+                value={monthStartDate}
+                onChange={e => setMonthStartDate(e.target.value || defaultMonthStartDate(selectedMonth, selectedYear))}
+                className="bg-transparent text-xs font-bold outline-none"
+              />
+            </label>
+
+            <label className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-slate-300 bg-slate-50">
+              <Calculator className="w-3.5 h-3.5 text-amber-500" />
+              <span className="text-[10px] font-bold text-slate-600">Working Days:</span>
+              <input
+                type="number"
+                min={1}
+                max={31}
+                value={totalWorkingDays}
+                onChange={e => setTotalWorkingDays(Math.min(31, Math.max(1, Number(e.target.value) || 26)))}
+                className="w-14 bg-transparent text-xs font-bold outline-none"
+              />
+            </label>
+
             <button
               onClick={handleCalculatePayroll}
               className="px-4 py-2 bg-blue-900 hover:bg-blue-800 text-white text-xs font-extrabold rounded-xl shadow flex items-center gap-1.5 transition-all"
@@ -853,6 +936,30 @@ export const PayrollManager: React.FC<PayrollManagerProps> = ({
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
+                  <label className="block font-bold text-slate-700 mb-1">Month Start Date</label>
+                  <input
+                    type="date"
+                    value={manualMonthStartDate || defaultMonthStartDate(manualMonth, manualYear)}
+                    onChange={e => setManualMonthStartDate(e.target.value || defaultMonthStartDate(manualMonth, manualYear))}
+                    className="w-full px-3 py-2 border rounded-xl font-bold bg-slate-50"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Total Working Days</label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={31}
+                    value={manualTotalWorkingDays}
+                    onChange={e => setManualTotalWorkingDays(Math.min(31, Math.max(1, Number(e.target.value) || 26)))}
+                    className="w-full px-3 py-2 border rounded-xl font-bold bg-slate-50"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
                   <label className="block font-bold text-slate-700 mb-1">Base Salary (PKR)</label>
                   <input
                     type="number"
@@ -870,6 +977,27 @@ export const PayrollManager: React.FC<PayrollManagerProps> = ({
                     onChange={e => setManualDeductions(Number(e.target.value))}
                     className="w-full px-3 py-2 border rounded-xl font-bold text-red-600 bg-slate-50"
                   />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3 bg-slate-50 border border-slate-200 rounded-xl p-3">
+                <div className="text-[11px]">
+                  <span className="font-black text-slate-700 block">Daily Salary</span>
+                  <span className="text-blue-900 font-extrabold text-sm">
+                    PKR {calcDailySalary(manualBase, manualTotalWorkingDays).toLocaleString()}
+                  </span>
+                  <span className="block text-[9px] text-slate-400">
+                    Base ÷ {resolveTotalWorkingDays(manualTotalWorkingDays)} working days
+                  </span>
+                </div>
+                <div className="text-[11px]">
+                  <span className="font-black text-slate-700 block">Half-Day Deduction</span>
+                  <span className="text-amber-600 font-extrabold text-sm">
+                    PKR {calcHalfDayDeduction(manualBase, manualTotalWorkingDays).toLocaleString()}
+                  </span>
+                  <span className="block text-[9px] text-slate-400">
+                    (Daily Salary ÷ 2) per HL attendance
+                  </span>
                 </div>
               </div>
 
@@ -931,6 +1059,29 @@ export const PayrollManager: React.FC<PayrollManagerProps> = ({
             </div>
 
             <form onSubmit={handleSaveEditPayroll} className="space-y-4 text-xs">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Month Start Date</label>
+                  <input
+                    type="date"
+                    value={editingPayroll.month_start_date || defaultMonthStartDate(editingPayroll.month, editingPayroll.year)}
+                    onChange={e => setEditingPayroll({ ...editingPayroll, month_start_date: e.target.value || defaultMonthStartDate(editingPayroll.month, editingPayroll.year) })}
+                    className="w-full px-3 py-2 border rounded-xl font-bold bg-slate-50"
+                  />
+                </div>
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Total Working Days</label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={31}
+                    value={resolveTotalWorkingDays(editingPayroll.total_working_days)}
+                    onChange={e => setEditingPayroll({ ...editingPayroll, total_working_days: Math.min(31, Math.max(1, Number(e.target.value) || 26)) })}
+                    className="w-full px-3 py-2 border rounded-xl font-bold bg-slate-50"
+                  />
+                </div>
+              </div>
+
               <div>
                 <label className="block font-bold text-slate-700 mb-1">Base Salary (PKR)</label>
                 <input
@@ -939,6 +1090,27 @@ export const PayrollManager: React.FC<PayrollManagerProps> = ({
                   onChange={e => setEditingPayroll({ ...editingPayroll, base_salary: Number(e.target.value) })}
                   className="w-full px-3 py-2 border rounded-xl font-bold bg-slate-50"
                 />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3 bg-slate-50 border border-slate-200 rounded-xl p-3">
+                <div className="text-[11px]">
+                  <span className="font-black text-slate-700 block">Daily Salary</span>
+                  <span className="text-blue-900 font-extrabold text-sm">
+                    PKR {calcDailySalary(editingPayroll.base_salary, editingPayroll.total_working_days).toLocaleString()}
+                  </span>
+                  <span className="block text-[9px] text-slate-400">
+                    Base ÷ {resolveTotalWorkingDays(editingPayroll.total_working_days)} working days
+                  </span>
+                </div>
+                <div className="text-[11px]">
+                  <span className="font-black text-slate-700 block">Half-Day Deduction</span>
+                  <span className="text-amber-600 font-extrabold text-sm">
+                    PKR {calcHalfDayDeduction(editingPayroll.base_salary, editingPayroll.total_working_days).toLocaleString()}
+                  </span>
+                  <span className="block text-[9px] text-slate-400">
+                    (Daily Salary ÷ 2) per HL attendance
+                  </span>
+                </div>
               </div>
 
               <div>

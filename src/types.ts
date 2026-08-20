@@ -202,7 +202,10 @@ export interface Payroll {
   teacher_id: string;
   month: string;
   year: number;
+  month_start_date?: string;
   total_working_days?: number;
+  daily_salary?: number;
+  half_day_deduction?: number;
   base_salary: number;
   present_count?: number;
   absent_count: number;
