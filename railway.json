@@ -1,0 +1,15 @@
+{
+  "$schema": "https://railway.app",
+  "build": {
+    "builder": "NIXPACKS",
+    "buildCommand": "npm ci && npm run build",
+    "watchPatterns": [
+      "!README.md",
+      "!manual-slips/**"
+    ]
+  },
+  "deploy": {
+    "startCommand": "npm run start",
+    "restartPolicyType": "ON_FAILURE"
+  }
+}
